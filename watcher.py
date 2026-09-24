@@ -23,6 +23,7 @@ class Watcher:
 
         self.source_checksum = Web3.to_checksum_address(cfg.source_wallet)
         self.source_lower = self.source_checksum.lower()
+        self._source_topic = "0x" + ("0" * 24) + self.source_lower[2:]
 
         self.factory_contract = w3.eth.contract(
             address=Web3.to_checksum_address(PANCAKE_V2_FACTORY), abi=PANCAKE_FACTORY_ABI
@@ -55,7 +56,6 @@ class Watcher:
                     to_block = min(safe_latest, from_block + self.cfg.max_block_batch - 1)
                     logger.info("Processing blocks %s..%s (head=%s)", from_block, to_block, latest)
 
-                    self.handle_bep20_transfers(from_block, to_block)
                     self.handle_pair_created(from_block, to_block)
                     for block_number in range(from_block, to_block + 1):
                         self.process_block(block_number)
@@ -68,7 +68,8 @@ class Watcher:
             time.sleep(self.cfg.poll_interval_seconds)
 
     # ------------------------------------------------------------------ #
-    # Per-block scan: native BNB transfers + contract-creation txs
+    # Per-block scan: native BNB transfers + BEP-20 transfers + contract
+    # creation txs
     # ------------------------------------------------------------------ #
 
     def process_block(self, block_number: int):
@@ -80,20 +81,40 @@ class Watcher:
             tx_from = tx["from"]
             tx_to = tx["to"]
 
-            if tx_from and tx_from.lower() == self.source_lower and tx_to is not None and tx["value"] > 0:
-                self._handle_native_transfer(tx, block)
+            if tx_from and tx_from.lower() == self.source_lower:
+                self._handle_source_tx(tx, block)
 
             if tx_to is None and tx_from and tx_from.lower() in watchlist:
                 self._handle_contract_creation(tx, block)
 
-    def _handle_native_transfer(self, tx, block):
+    def _handle_source_tx(self, tx, block):
+        """Any transaction sent BY the source wallet: check it for both a
+        native value transfer and any BEP-20 Transfer events it emitted.
+
+        This inspects the transaction's own receipt logs rather than
+        calling eth_getLogs across the whole block range with no address
+        filter — some RPC providers' free/shared tiers (e.g. QuickNode's
+        discover plan) reject address-less eth_getLogs outright, and this
+        approach works everywhere since it only needs a receipt for a
+        transaction we already know the hash of. The trade-off: it only
+        catches transfers where the source wallet itself sent the
+        transaction, not a third party pulling funds via a pre-approved
+        transferFrom() — see the README limitations section.
+        """
         tx_hash = to_hex_str(tx["hash"])
-        alert_id = f"{tx_hash}:-1:transfer_native"
-        if self.state.is_alerted(alert_id):
+        receipt = call_with_retry(self.w3.eth.get_transaction_receipt, tx["hash"], what="get_receipt source tx")
+        if receipt.status != 1:
             return
 
-        receipt = call_with_retry(self.w3.eth.get_transaction_receipt, tx["hash"], what="get_receipt native")
-        if receipt.status != 1:
+        if tx["to"] is not None and tx["value"] > 0:
+            self._alert_native_transfer(tx, block, tx_hash)
+
+        for log in receipt.logs:
+            self._maybe_alert_bep20_transfer(log, block, tx_hash)
+
+    def _alert_native_transfer(self, tx, block, tx_hash):
+        alert_id = f"{tx_hash}:-1:transfer_native"
+        if self.state.is_alerted(alert_id):
             return
 
         recipient = tx["to"]
@@ -104,6 +125,40 @@ class Watcher:
         if not self.notifier.send(text):
             logger.error("Failed to deliver native transfer alert for tx %s after retries", tx_hash)
         self.state.mark_alerted(alert_id, "transfer_native", tx_hash)
+
+    def _maybe_alert_bep20_transfer(self, log, block, tx_hash):
+        topics = log.get("topics") or []
+        if len(topics) < 3 or to_hex_str(topics[0]).lower() != TRANSFER_EVENT_TOPIC.lower():
+            return
+        if to_hex_str(topics[1]).lower() != self._source_topic.lower():
+            return  # a Transfer log in this tx, but not one where `from` is the source wallet
+
+        log_index = log["logIndex"]
+        alert_id = f"{tx_hash}:{log_index}:transfer_bep20"
+        if self.state.is_alerted(alert_id):
+            return
+
+        token_address = Web3.to_checksum_address(log["address"])
+        try:
+            contract = self.w3.eth.contract(address=token_address, abi=ERC20_ABI)
+            event = contract.events.Transfer().process_log(log)
+        except Exception as e:
+            logger.warning("Could not decode Transfer log in tx %s (token %s): %s", tx_hash, token_address, e)
+            return
+
+        to_addr = event["args"]["to"]
+        raw_value = event["args"]["value"]
+        if raw_value == 0:
+            return
+
+        token_meta = self._get_token_meta_cached(token_address)
+        amount = format_amount(raw_value, token_meta["decimals"])
+        self._add_to_watchlist(to_addr, tx_hash, block.number, block.timestamp)
+
+        text = self._format_transfer_alert(to_addr, amount, token_meta["symbol"], tx_hash, token_address=token_address)
+        if not self.notifier.send(text):
+            logger.error("Failed to deliver BEP-20 transfer alert for tx %s after retries", tx_hash)
+        self.state.mark_alerted(alert_id, "transfer_bep20", tx_hash)
 
     def _handle_contract_creation(self, tx, block):
         tx_hash = to_hex_str(tx["hash"])
@@ -130,48 +185,9 @@ class Watcher:
         self.state.mark_token_launched(contract_address, deployer, tx_hash, "contract_creation")
 
     # ------------------------------------------------------------------ #
-    # Log-based scans: BEP-20 transfers out of source, PancakeSwap pairs
+    # Log-based scan: PancakeSwap pair creations (address-filtered, so
+    # this one is unaffected by free-tier eth_getLogs restrictions)
     # ------------------------------------------------------------------ #
-
-    def handle_bep20_transfers(self, from_block: int, to_block: int):
-        source_topic = "0x" + ("0" * 24) + self.source_lower[2:]
-        logs = call_with_retry(
-            self.w3.eth.get_logs,
-            {"fromBlock": from_block, "toBlock": to_block, "topics": [TRANSFER_EVENT_TOPIC, source_topic]},
-            what="get_logs bep20 transfers",
-        )
-        for log in logs:
-            self._handle_single_bep20_transfer(log)
-
-    def _handle_single_bep20_transfer(self, log):
-        tx_hash = to_hex_str(log["transactionHash"])
-        log_index = log["logIndex"]
-        alert_id = f"{tx_hash}:{log_index}:transfer_bep20"
-        if self.state.is_alerted(alert_id):
-            return
-
-        token_address = Web3.to_checksum_address(log["address"])
-        try:
-            contract = self.w3.eth.contract(address=token_address, abi=ERC20_ABI)
-            event = contract.events.Transfer().process_log(log)
-        except Exception as e:
-            logger.warning("Could not decode Transfer log in tx %s (token %s): %s", tx_hash, token_address, e)
-            return
-
-        to_addr = event["args"]["to"]
-        raw_value = event["args"]["value"]
-        if raw_value == 0:
-            return
-
-        block = call_with_retry(self.w3.eth.get_block, log["blockNumber"], what="get_block for bep20 ts")
-        token_meta = self._get_token_meta_cached(token_address)
-        amount = format_amount(raw_value, token_meta["decimals"])
-        self._add_to_watchlist(to_addr, tx_hash, log["blockNumber"], block.timestamp)
-
-        text = self._format_transfer_alert(to_addr, amount, token_meta["symbol"], tx_hash, token_address=token_address)
-        if not self.notifier.send(text):
-            logger.error("Failed to deliver BEP-20 transfer alert for tx %s after retries", tx_hash)
-        self.state.mark_alerted(alert_id, "transfer_bep20", tx_hash)
 
     def handle_pair_created(self, from_block: int, to_block: int):
         logs = call_with_retry(

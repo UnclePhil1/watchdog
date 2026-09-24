@@ -259,6 +259,14 @@ See `.env.example` for the full list with defaults. Key ones:
   free tiers can cause a gap. The retry/backoff logic handles transient
   failures but can't invent data an RPC never returned. Use a reputable
   provider for anything you actually care about.
+- **BEP-20 transfer detection only catches transactions the source
+  wallet itself sent.** If the source wallet approves a spender and that
+  spender later calls `transferFrom(source, someone, amount)` from their
+  own transaction, that transfer won't be alerted — the bot only
+  inspects receipts of transactions where `tx.from == SOURCE_WALLET`. See
+  the Development notes for why (RPC providers on free tiers commonly
+  reject the `eth_getLogs` query that would be needed to also catch
+  `transferFrom` regardless of who sent the transaction).
 - **What "memecoin launch" can miss:**
   - Tokens deployed via a factory/proxy pattern where the *watchlisted
     wallet* is not the `tx.from` of the raw contract-creation transaction
@@ -311,11 +319,23 @@ See `.env.example` for the full list with defaults. Key ones:
   comparisons/storage and displayed as EIP-55 checksum addresses in
   alerts. Solana addresses are **case-sensitive** base58 and are always
   stored/compared verbatim — never lowercased.
-- BEP-20 transfers and PancakeSwap pair creations are found via
-  `eth_getLogs` with topic filters (efficient — no full-chain scanning);
-  native transfers and contract-creation transactions require iterating
-  each block's transactions, since there's no log event for a plain
-  value transfer or a plain `CREATE`.
+- Native transfers, contract-creation transactions, and BEP-20 transfers
+  are all detected by iterating each block's transactions and, for any
+  transaction sent by the source wallet, inspecting its own receipt
+  (`eth_getTransactionReceipt`, then scanning `receipt.logs` for a
+  `Transfer` event whose `from` topic matches the source). This
+  deliberately avoids an address-less `eth_getLogs` scan across the
+  block range: several RPC providers' free/shared tiers (QuickNode's
+  discover plan, notably) reject `eth_getLogs` calls that don't specify
+  a contract `address`, and there's no single address to filter by here
+  since the source wallet can send BEP-20 transfers on *any* token
+  contract. The trade-off is documented above: this only catches
+  transfers the source wallet itself sent, not a third party pulling
+  funds via a pre-approved `transferFrom()`.
+- PancakeSwap pair creations, by contrast, *are* found via `eth_getLogs`
+  with an address filter (the factory contract) plus the `PairCreated`
+  topic — that's a single well-known address, so it isn't affected by
+  the same provider restriction.
 - `geth_poa_middleware` is injected because BSC block headers carry
   extra validator data (like Clique PoA chains), which trips web3.py's
   default header validation otherwise.
