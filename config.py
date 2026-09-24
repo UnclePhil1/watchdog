@@ -1,12 +1,17 @@
 """Environment configuration loading."""
 
+import logging
 import os
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
+from solana_utils import is_probably_solana_address
+
 load_dotenv()
+
+logger = logging.getLogger("watchdog.config")
 
 DEFAULT_SOURCE_WALLET = "0xa81697d866bFCfbDecd44134c5c02c7032c07777"
 
@@ -25,6 +30,14 @@ class Config:
     start_block: Optional[int]
     db_path: str
     log_level: str
+    # Solana (pump.fun) launch monitoring — optional. Disabled entirely
+    # unless SOLANA_RPC_HTTP is set, since there is no on-chain way to
+    # automatically link a BSC recipient wallet to a Solana wallet; the
+    # watchlist is operator-supplied (env var and/or the /watch_sol
+    # Telegram command).
+    solana_rpc_http: Optional[str] = None
+    solana_watchlist: List[str] = field(default_factory=list)
+    solana_poll_interval_seconds: float = 10.0
 
 
 def _required(name: str) -> str:
@@ -42,6 +55,19 @@ def load_config() -> Config:
 
     start_block_env = os.environ.get("START_BLOCK", "").strip()
 
+    solana_rpc_http = os.environ.get("SOLANA_RPC_HTTP", "").strip() or None
+    solana_watchlist_env = os.environ.get("SOLANA_WATCHLIST", "").strip()
+    solana_watchlist = []
+    if solana_watchlist_env:
+        for addr in solana_watchlist_env.split(","):
+            addr = addr.strip()
+            if not addr:
+                continue
+            if not is_probably_solana_address(addr):
+                logger.warning("Ignoring SOLANA_WATCHLIST entry that doesn't look like a Solana address: %s", addr)
+                continue
+            solana_watchlist.append(addr)
+
     return Config(
         rpc_wss=rpc_wss,
         rpc_http=rpc_http,
@@ -55,4 +81,7 @@ def load_config() -> Config:
         start_block=int(start_block_env) if start_block_env else None,
         db_path=os.environ.get("DB_PATH", "watchdog.db"),
         log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        solana_rpc_http=solana_rpc_http,
+        solana_watchlist=solana_watchlist,
+        solana_poll_interval_seconds=float(os.environ.get("SOLANA_POLL_INTERVAL_SECONDS", "10")),
     )

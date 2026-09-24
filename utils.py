@@ -4,6 +4,9 @@ from decimal import Decimal
 
 BSCSCAN_TX_URL = "https://bscscan.com/tx/{}"
 BSCSCAN_ADDRESS_URL = "https://bscscan.com/address/{}"
+SOLSCAN_TX_URL = "https://solscan.io/tx/{}"
+SOLSCAN_TOKEN_URL = "https://solscan.io/token/{}"
+SOLSCAN_ACCOUNT_URL = "https://solscan.io/account/{}"
 
 
 def shorten(address: str) -> str:
@@ -22,6 +25,18 @@ def bscscan_tx_url(tx_hash: str) -> str:
 
 def bscscan_address_url(address: str) -> str:
     return BSCSCAN_ADDRESS_URL.format(address)
+
+
+def solscan_tx_url(signature: str) -> str:
+    return SOLSCAN_TX_URL.format(signature)
+
+
+def solscan_token_url(mint: str) -> str:
+    return SOLSCAN_TOKEN_URL.format(mint)
+
+
+def solscan_account_url(address: str) -> str:
+    return SOLSCAN_ACCOUNT_URL.format(address)
 
 
 def to_hex_str(value) -> str:

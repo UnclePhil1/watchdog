@@ -1,11 +1,17 @@
 # Watchdog — BSC Wallet Monitoring Bot
 
-Read-only monitoring bot for BNB Smart Chain (BSC). It watches one source
-wallet and sends a Telegram alert the moment that wallet sends native BNB
-or any BEP-20 token to another address. It then keeps an eye on every
-recipient it has ever funded, and sends a second alert if one of those
-recipients later deploys what looks like a new token and/or launches it
-on PancakeSwap V2.
+Read-only monitoring bot for BNB Smart Chain (BSC), with optional Solana
+add-on monitoring. It watches one source wallet and sends a Telegram
+alert the moment that wallet sends native BNB or any BEP-20 token to
+another address. It then keeps an eye on every recipient it has ever
+funded, and sends a second alert if one of those recipients later
+deploys what looks like a new token and/or launches it on PancakeSwap V2.
+
+Separately, it can also watch an operator-supplied list of **Solana**
+wallets and alert when one of them launches a token on **pump.fun** — see
+[Solana (pump.fun) monitoring](#solana-pumpfun-monitoring-optional) below
+for why that list has to be supplied manually rather than discovered
+automatically.
 
 No private keys, no signing, no trading — alerts only.
 
@@ -41,30 +47,86 @@ order:
 Each token is alerted at most once, deduped by contract address.
 
 > **Note on the "Solana" wording in the original spec:** the task
-> description said funded wallets "launching a memecoin on Solana" should
-> trigger the second alert, but every concrete technical detail it gave
-> (the PancakeSwap V2 Factory address, `PairCreated` topic, EVM
-> contract-creation semantics, ERC-20 `name/symbol/decimals/totalSupply`
-> checks) is BSC/EVM-specific — Solana uses a completely different
-> address format and has no PancakeSwap V2 factory at that address. This
-> is treated as a wording slip for "launches a memecoin **on BSC**", and
-> the bot implements BSC-side launch detection as specified by the
-> PancakeSwap V2 factory and ERC-20 checks. If Solana monitoring is
-> genuinely needed too, it would require a separate Solana RPC/indexer
-> (e.g. tracking Pump.fun / Raydium program logs for a Solana address
-> controlled by the same operator) and is out of scope for this BSC-only
-> implementation.
+> description said funded BSC recipient wallets "launching a memecoin on
+> Solana" should trigger the second alert, but every concrete technical
+> detail it gave (the PancakeSwap V2 Factory address, `PairCreated`
+> topic, EVM contract-creation semantics, ERC-20
+> `name/symbol/decimals/totalSupply` checks) is BSC/EVM-specific. That
+> BSC-side detection is what's described above and is what actually
+> watches the funded recipients automatically. Solana monitoring is
+> implemented too (below), but as a **separate, manually-linked**
+> watchlist — see why in the next section.
+
+## Solana (pump.fun) monitoring (optional)
+
+A BSC address and a Solana address live in entirely different key
+spaces — there is no cryptographic or on-chain link that lets the bot
+automatically figure out "this BSC recipient also controls this Solana
+wallet." So unlike the BSC watchlist (which fills itself in from
+observed transfers), the Solana watchlist has to be told which wallets
+to watch, by you, once you've identified them through your own means
+(e.g. the recipient publicly links both wallets, a CEX withdrawal trail,
+OSINT, etc.).
+
+Once a Solana wallet is on that watchlist, the bot watches it for
+**pump.fun token creation** — pump.fun is the dominant Solana memecoin
+launchpad, so a wallet calling its `create` instruction is a strong,
+low-noise "this wallet just launched a memecoin" signal (the same role
+`PairCreated` plays on the BSC side).
+
+**Enabling it:**
+
+1. Set `SOLANA_RPC_HTTP` in `.env` (e.g.
+   `https://api.mainnet-beta.solana.com`, or a provider like Helius/
+   QuickNode/Ankr for production use). Leaving it unset disables Solana
+   monitoring entirely — the bot runs BSC-only, exactly as before.
+2. Seed the watchlist via `SOLANA_WATCHLIST` (comma-separated addresses)
+   in `.env`, and/or add wallets at runtime from Telegram:
+   - `/watch_sol <address>` — add a Solana wallet to the watchlist
+   - `/unwatch_sol <address>` — remove one
+   - `/status` also reports how many Solana wallets are being watched
+3. When a watched wallet's transaction both invokes the pump.fun program
+   and logs `Instruction: Create`, the bot sends a
+   **MEMECOIN LAUNCH (Solana / pump.fun)** alert with the new token
+   mint, the deployer, the tx signature, name/symbol (best-effort — see
+   below), and Solscan links. Deduped by mint address, same as the BSC
+   side is deduped by token address.
+
+**How detection works, precisely** (`solana_watcher.py`):
+
+- Each watched wallet is polled independently via `getSignaturesForAddress`
+  (paginated backward to avoid missing transactions if a burst happens
+  between polls), tracking a per-wallet last-seen-signature cursor in
+  SQLite so restarts resume cleanly, exactly like the BSC block cursor.
+  A newly added wallet starts from its current latest signature — no
+  history backfill, matching the BSC watcher's default behavior.
+- A transaction counts as a pump.fun launch if its log messages show
+  both the pump.fun program being invoked *and* an `Instruction: Create`
+  line (Anchor's standard per-instruction log).
+- The **new token mint** is found by diffing `preTokenBalances` vs
+  `postTokenBalances` (robust to pump.fun changing its instruction's
+  account ordering), falling back to the first account of the pump.fun
+  instruction if that diff finds nothing.
+- **Name/symbol** are a best-effort Borsh decode of the create
+  instruction's raw data (skip the 8-byte Anchor discriminator, read two
+  length-prefixed UTF-8 strings). This is inherently fragile — if
+  pump.fun changes its instruction layout, parsing may fail. It's wrapped
+  so a parse failure **never blocks the alert**: you still get the mint
+  address, deployer, signature, and links, just with name/symbol shown
+  as "unknown" instead of guessed wrong.
 
 ## Project layout
 
 ```
-main.py             entry point — wires everything together, runs the loop
+main.py             entry point — wires everything together, runs the loop(s)
 config.py           env var loading and validation
-constants.py        contract addresses, event topics, minimal ABIs
+constants.py        contract/program addresses, event topics, minimal ABIs
 chain_utils.py       web3 connection setup + generic RPC retry wrapper
-state.py             SQLite persistence (last block, dedupe, watchlist)
-watcher.py           core detection logic (transfers + launch detection)
-telegram_notify.py   Telegram alert sending + /status command responder
+state.py             SQLite persistence (BSC + Solana state, dedupe, watchlists)
+watcher.py           BSC detection logic (transfers + launch detection)
+solana_watcher.py     Solana detection logic (pump.fun launches)
+solana_utils.py       base58 decode, address sanity check, Borsh string reader
+telegram_notify.py   Telegram alert sending + slash-command responder
 utils.py              formatting helpers (amounts, addresses, HTML escaping)
 requirements.txt
 .env.example
@@ -111,6 +173,11 @@ cp .env.example .env
 `0xa81697d866bFCfbDecd44134c5c02c7032c07777`; only set it if you want to
 watch a different address.
 
+`SOLANA_RPC_HTTP` / `SOLANA_WATCHLIST` are optional — leave them unset for
+BSC-only monitoring. See
+[Solana (pump.fun) monitoring](#solana-pumpfun-monitoring-optional) to
+enable the add-on.
+
 ### 4. Install and run
 
 ```bash
@@ -129,7 +196,8 @@ You should see log lines like:
 ```
 
 Send `/status` to the bot in Telegram at any time to get the last
-processed block, number of watched recipient wallets, and uptime.
+processed block, watchlist sizes, and uptime. Send `/help` for the full
+command list.
 
 ## State and restarts
 
@@ -147,12 +215,20 @@ All state lives in a local SQLite file (`DB_PATH`, default
 - `launched_tokens` — every token already alerted as a launch, keyed by
   token address, so it's never alerted twice even if both detection
   signals fire for it.
+- `solana_watchlist` — Solana wallets to watch for pump.fun launches
+  (operator-supplied; see above), and whether each was added via
+  `SOLANA_WATCHLIST` or `/watch_sol`.
+- `solana_wallet_cursor` — last-seen transaction signature per watched
+  Solana wallet, for incremental polling.
+- `solana_launched_tokens` — every Solana token mint already alerted,
+  deduped the same way as `launched_tokens`.
 
 On restart the bot reads `last_block` from `meta` and resumes from there
 — it does not miss blocks and does not reprocess/duplicate ones it
 already handled. On the very first run (no state yet), it starts from
 the current chain head by default (no history backfill) unless
-`START_BLOCK` is set.
+`START_BLOCK` is set. Each Solana wallet behaves the same way
+independently via its own cursor.
 
 ## Configuration reference
 
@@ -168,6 +244,9 @@ See `.env.example` for the full list with defaults. Key ones:
 | `LAUNCH_LOOKBACK_BLOCKS` | Max age (in blocks) between a wallet's contract deployment and a later PancakeSwap pair for it to still count as the same launch (default 200). |
 | `MAX_BLOCK_BATCH` | Caps how many blocks are scanned per loop iteration / `eth_getLogs` call — lower this if your RPC provider rejects large block ranges. |
 | `START_BLOCK` | Only used on a fresh DB with no prior state — backfill from this block instead of starting at chain head. |
+| `SOLANA_RPC_HTTP` | Enables Solana/pump.fun monitoring when set; leave unset to disable it entirely. |
+| `SOLANA_WATCHLIST` | Comma-separated Solana wallets to watch from startup (more can be added later via `/watch_sol`). |
+| `SOLANA_POLL_INTERVAL_SECONDS` | How often each watched Solana wallet is polled (default 10s). |
 
 ## Limitations (read before relying on this)
 
@@ -206,11 +285,32 @@ See `.env.example` for the full list with defaults. Key ones:
 - **Single process, single instance.** Running two copies against the
   same `DB_PATH` will race; don't do that. Running two copies against
   different DB files will each alert independently (duplicate alerts).
+- **Solana wallet linkage is manual, not automatic.** The bot cannot
+  discover on its own that a funded BSC recipient also controls a given
+  Solana wallet — see
+  [Solana (pump.fun) monitoring](#solana-pumpfun-monitoring-optional).
+  If you never add a Solana wallet to the watchlist, it is never
+  checked, no matter what the corresponding BSC wallet does.
+- **What Solana "memecoin launch" can miss:**
+  - Only **pump.fun** creation is detected. A token minted directly via
+    the SPL Token program and listed straight on Raydium/Orca without
+    ever touching pump.fun will not trigger an alert.
+  - Name/symbol extraction is a best-effort Borsh parse of pump.fun's
+    current instruction layout; if pump.fun changes it, name/symbol may
+    come back as "unknown" (the alert itself — mint, deployer, tx,
+    links — still fires correctly, since that part depends only on the
+    pump.fun program ID and log lines, not the byte layout).
+  - Each wallet is polled independently with a safety cap of ~500
+    signatures per poll cycle; an extremely high-throughput wallet that
+    exceeds that between polls could have older transactions skipped in
+    that cycle (rare in practice for a monitored recipient wallet).
 
 ## Development notes
 
-- Addresses are normalized to lowercase for internal comparisons/storage
-  and displayed as EIP-55 checksum addresses in alerts.
+- BSC addresses are normalized to lowercase for internal
+  comparisons/storage and displayed as EIP-55 checksum addresses in
+  alerts. Solana addresses are **case-sensitive** base58 and are always
+  stored/compared verbatim — never lowercased.
 - BEP-20 transfers and PancakeSwap pair creations are found via
   `eth_getLogs` with topic filters (efficient — no full-chain scanning);
   native transfers and contract-creation transactions require iterating
@@ -219,4 +319,13 @@ See `.env.example` for the full list with defaults. Key ones:
 - `geth_poa_middleware` is injected because BSC block headers carry
   extra validator data (like Clique PoA chains), which trips web3.py's
   default header validation otherwise.
+- The Solana watcher runs in its own background thread on its own poll
+  interval, independent of the BSC block loop, since Solana's
+  transaction model (signature-based, per-account history) doesn't map
+  onto BSC's block-number polling. It talks to the Solana RPC directly
+  over JSON-RPC via `httpx` rather than pulling in `solana-py`/`solders`,
+  to keep the dependency footprint small — the only decoding needed
+  (base58, a couple of Borsh strings) is ~50 lines in `solana_utils.py`,
+  cross-checked against the reference `base58` package during
+  development.
 

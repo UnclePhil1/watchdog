@@ -46,6 +46,28 @@ CREATE TABLE IF NOT EXISTS launched_tokens (
     detection_method TEXT NOT NULL,
     alerted_at TEXT NOT NULL
 );
+
+-- Solana side: an operator-supplied watchlist (there is no on-chain way
+-- to link a BSC recipient wallet to a Solana wallet automatically), a
+-- per-wallet signature cursor for incremental polling, and a dedupe
+-- table for already-alerted token mints.
+CREATE TABLE IF NOT EXISTS solana_watchlist (
+    address TEXT PRIMARY KEY,
+    added_at TEXT NOT NULL,
+    source TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS solana_wallet_cursor (
+    address TEXT PRIMARY KEY,
+    last_signature TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS solana_launched_tokens (
+    mint_address TEXT PRIMARY KEY,
+    deployer TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    alerted_at TEXT NOT NULL
+);
 """
 
 
@@ -152,4 +174,65 @@ class State:
                 "INSERT OR IGNORE INTO launched_tokens"
                 "(token_address, deployer, tx_hash, detection_method, alerted_at) VALUES (?,?,?,?,?)",
                 (token_address.lower(), deployer.lower(), tx_hash, detection_method, _now()),
+            )
+
+    # -- Solana watchlist (operator-supplied; see module docstring) -------------
+    # NOTE: unlike EVM addresses, Solana base58 addresses are case-sensitive,
+    # so these are stored and compared verbatim — never lowercased.
+
+    def add_solana_watchlist(self, address: str, source: str = "env") -> bool:
+        """Returns True if this is a newly added wallet."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT OR IGNORE INTO solana_watchlist(address, added_at, source) VALUES (?,?,?)",
+                (address, _now(), source),
+            )
+        return cur.rowcount > 0
+
+    def remove_solana_watchlist(self, address: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute("DELETE FROM solana_watchlist WHERE address=?", (address,))
+            self._conn.execute("DELETE FROM solana_wallet_cursor WHERE address=?", (address,))
+        return cur.rowcount > 0
+
+    def get_solana_watchlist(self):
+        with self._lock:
+            rows = self._conn.execute("SELECT address FROM solana_watchlist").fetchall()
+        return [r[0] for r in rows]
+
+    def get_solana_watchlist_count(self) -> int:
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM solana_watchlist").fetchone()
+        return row[0]
+
+    def get_solana_cursor(self, address: str):
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT last_signature FROM solana_wallet_cursor WHERE address=?", (address,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def set_solana_cursor(self, address: str, signature: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO solana_wallet_cursor(address, last_signature) VALUES (?,?) "
+                "ON CONFLICT(address) DO UPDATE SET last_signature=excluded.last_signature",
+                (address, signature),
+            )
+
+    # -- Solana launched tokens (deduped by mint) --------------------------------
+
+    def is_solana_token_launched(self, mint_address: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM solana_launched_tokens WHERE mint_address=?", (mint_address,)
+            ).fetchone()
+        return row is not None
+
+    def mark_solana_token_launched(self, mint_address: str, deployer: str, signature: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO solana_launched_tokens"
+                "(mint_address, deployer, signature, alerted_at) VALUES (?,?,?,?)",
+                (mint_address, deployer, signature, _now()),
             )

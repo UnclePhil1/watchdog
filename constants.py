@@ -5,6 +5,9 @@ from web3 import Web3
 # PancakeSwap V2 Factory on BSC mainnet.
 PANCAKE_V2_FACTORY = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
 
+# Pump.fun program on Solana mainnet-beta (the dominant memecoin launchpad).
+PUMP_FUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
 TRANSFER_EVENT_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
 PAIR_CREATED_TOPIC = Web3.keccak(text="PairCreated(address,address,address,uint256)").hex()
 

@@ -1,8 +1,8 @@
-"""Telegram alert delivery and a lightweight /status command responder.
+"""Telegram alert delivery and a lightweight slash-command responder.
 
 Uses raw HTTP calls to the Telegram Bot API via httpx rather than a full
-bot framework, since the only inbound feature needed is a single /status
-command.
+bot framework, since the only inbound feature needed is a handful of
+simple commands (/status, /watch_sol, /unwatch_sol).
 """
 
 import logging
@@ -49,15 +49,21 @@ class TelegramNotifier:
         return False
 
 
-class StatusResponder(threading.Thread):
-    """Long-polls getUpdates and replies to /status with a status_provider() string."""
+class CommandResponder(threading.Thread):
+    """Long-polls getUpdates and dispatches recognized slash commands.
 
-    def __init__(self, token: str, chat_id: str, status_provider, notifier: TelegramNotifier):
-        super().__init__(daemon=True, name="telegram-status-responder")
+    `commands` maps a command string (e.g. "/status") to a handler
+    `callable(args: str) -> Optional[str]`, where `args` is whatever text
+    followed the command and the return value (if truthy) is sent back
+    as a reply. Only messages from `chat_id` are processed.
+    """
+
+    def __init__(self, token: str, chat_id: str, notifier: TelegramNotifier, commands: dict):
+        super().__init__(daemon=True, name="telegram-command-responder")
         self.token = token
         self.chat_id = str(chat_id)
-        self.status_provider = status_provider
         self.notifier = notifier
+        self.commands = commands
         self._stop_event = threading.Event()
         self._client = httpx.Client(timeout=40)
         self._offset = None
@@ -87,21 +93,37 @@ class StatusResponder(threading.Thread):
                 data = resp.json()
                 for update in data.get("result", []):
                     self._offset = update["update_id"] + 1
-                    message = update.get("message") or update.get("channel_post")
-                    if not message:
-                        continue
-                    text = (message.get("text") or "").strip()
-                    chat_id = str(message.get("chat", {}).get("id"))
-                    if chat_id != self.chat_id:
-                        continue
-                    if text.startswith("/status"):
-                        self.notifier.send(self.status_provider())
+                    self._handle_update(update)
             except httpx.HTTPError as e:
                 logger.warning("Telegram getUpdates error: %s", e)
                 time.sleep(3)
             except Exception:
-                logger.exception("Unexpected error in Telegram status responder")
+                logger.exception("Unexpected error in Telegram command responder")
                 time.sleep(3)
+
+    def _handle_update(self, update):
+        message = update.get("message") or update.get("channel_post")
+        if not message:
+            return
+        text = (message.get("text") or "").strip()
+        chat_id = str(message.get("chat", {}).get("id"))
+        if chat_id != self.chat_id or not text.startswith("/"):
+            return
+
+        parts = text.split(maxsplit=1)
+        command = parts[0].split("@")[0]  # strip a "/cmd@BotName" suffix
+        args = parts[1].strip() if len(parts) > 1 else ""
+
+        handler = self.commands.get(command)
+        if handler is None:
+            return
+        try:
+            reply = handler(args)
+        except Exception:
+            logger.exception("Error handling Telegram command %s", command)
+            reply = "⚠️ Internal error handling that command; check the logs."
+        if reply:
+            self.notifier.send(reply)
 
     def stop(self):
         self._stop_event.set()
