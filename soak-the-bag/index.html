@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Soak the Bag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Pixelify+Sans:wght@500;700&display=swap">
+<style>
+/* Night-kitchen arcade: one column, the bowl sits center stage like a cabinet screen, controls stacked under the thumb */
+:root {
+  --night: #1c1838;
+  --night-2: #272152;
+  --night-3: #352d6b;
+  --line: #4b4190;
+  --cassava: #f4c430;
+  --cassava-deep: #c9861a;
+  --enamel: #3d7ad6;
+  --enamel-deep: #22509e;
+  --cream: #fff3d4;
+  --muted: #bdb3e2;
+  --spoon: #9a6633;
+  --good: #8fe39a;
+  --warn: #ffbf73;
+  --bad: #ff8a7d;
+  --scrim: rgba(18, 15, 38, 0.95);
+  --display: "Pixelify Sans", "Courier New", monospace;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(120% 70% at 50% 0%, var(--night-3) 0%, var(--night) 60%) var(--night);
+  color: var(--cream);
+  font: 16px/1.45 var(--body);
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--cassava); outline-offset: 2px; }
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+}
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.brand {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.45rem;
+  line-height: 1;
+  color: var(--cassava);
+  text-shadow: 2px 2px 0 var(--cassava-deep);
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+.top-actions { display: flex; gap: 6px; }
+.btn-sm {
+  font-family: var(--display);
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  background: var(--night-2);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--night);
+}
+.btn-sm:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--night); }
+
+/* Phase strip */
+.strip { display: flex; align-items: center; gap: 10px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; flex: 1; min-width: 0; }
+.steps li {
+  flex: 1;
+  font-family: var(--display);
+  font-size: 0.72rem;
+  text-align: center;
+  padding: 4px 0 3px;
+  border-radius: 4px;
+  background: var(--night-2);
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.steps li.done { color: var(--cream); background: var(--night-3); }
+.steps li.done::after { content: " \2713"; }
+.steps li[aria-current="step"] { color: var(--night); background: var(--cassava); border-bottom-color: var(--cassava-deep); font-weight: 700; }
+.clock { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 64px; }
+.clock-num { font-family: var(--display); font-size: 1.15rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.clock-bar { width: 64px; height: 6px; background: var(--night-2); border-radius: 3px; overflow: hidden; }
+.clock-bar i { display: block; height: 100%; width: 100%; background: var(--cassava); transform-origin: left; }
+.clock.hurry .clock-num { color: var(--bad); }
+.clock.hurry .clock-bar i { background: var(--bad); }
+
+/* Stage */
+.stage { position: relative; display: flex; justify-content: center; }
+#bowl {
+  width: min(100%, 44vh, 400px);
+  width: min(100%, 44svh, 400px);
+  aspect-ratio: 1;
+  max-width: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--night-2), 0 10px 30px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  cursor: pointer;
+  display: block;
+}
+#bowl.shake { animation: shake 0.18s linear; }
+@keyframes shake { 25% { transform: translate(2px, -1px); } 50% { transform: translate(-2px, 1px); } 75% { transform: translate(1px, 1px); } }
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translate(-50%, -6px);
+  max-width: calc(100% - 24px);
+  background: var(--cream);
+  color: var(--night);
+  font-family: var(--display);
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 var(--cassava-deep);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Panel */
+.panel { display: flex; flex-direction: column; gap: 8px; }
+.phase-title { font-family: var(--display); font-weight: 700; font-size: 1.5rem; line-height: 1.1; margin: 0; text-wrap: balance; }
+.phase-title small { font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-right: 6px; vertical-align: 3px; }
+.hint { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 60ch; }
+.coach { margin: 0; padding: 10px 12px; list-style: none; background: var(--night-2); border: 2px dashed var(--line); border-radius: 8px; display: grid; gap: 4px; font-size: 0.92rem; }
+.coach b { font-family: var(--display); color: var(--cassava); margin-right: 6px; }
+
+.meter-wrap { display: flex; flex-direction: column; gap: 4px; }
+.meter {
+  position: relative;
+  height: 26px;
+  background: var(--night-2);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.meter .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--cassava); opacity: 0.9; }
+.meter.water .fill { background: var(--enamel); }
+.meter.sugar .fill { background: var(--cream); }
+.meter .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 243, 212, 0.38) 0 4px, rgba(255, 243, 212, 0.08) 4px 8px);
+  border-left: 2px solid var(--cream);
+  border-right: 2px solid var(--cream);
+  z-index: 2;
+}
+.meter .band span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cream);
+  text-shadow: 0 1px 0 var(--night), 1px 0 0 var(--night), -1px 0 0 var(--night), 0 -1px 0 var(--night);
+}
+.meter .mark { position: absolute; top: -2px; bottom: -2px; width: 3px; background: var(--cream); z-index: 3; box-shadow: 0 0 0 1px var(--night); }
+.readout { display: flex; justify-content: space-between; gap: 10px; font-family: var(--display); font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.readout .state::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; background: var(--muted); vertical-align: 1px; }
+.readout .state.good { color: var(--good); }
+.readout .state.good::before { background: var(--good); }
+.readout .state.warn { color: var(--warn); }
+.readout .state.warn::before { background: var(--warn); transform: rotate(45deg); }
+.readout .state.bad { color: var(--bad); }
+.readout .state.bad::before { background: var(--bad); border-radius: 50%; }
+.readout .num { color: var(--muted); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  flex: 1 1 auto;
+  min-height: 56px;
+  padding: 10px 16px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  border-radius: 10px;
+  border: 3px solid var(--night);
+  cursor: pointer;
+  background: var(--night-3);
+  color: var(--cream);
+  box-shadow: 0 5px 0 var(--night), inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: transform 0.05s;
+}
+.btn:active, .btn.on { transform: translateY(4px); box-shadow: 0 1px 0 var(--night), inset 0 -2px 0 rgba(0, 0, 0, 0.18); }
+.btn.primary { background: var(--cassava); color: var(--night); }
+.btn.hold { background: var(--enamel); color: var(--cream); touch-action: none; flex-basis: 60%; }
+.btn.hold.on { background: var(--enamel-deep); }
+.btn.big { min-height: 66px; font-size: 1.25rem; }
+.choice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.choice .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-height: 92px; }
+.choice .btn b { font-size: 1.4rem; }
+.choice .btn small { font-family: var(--body); font-weight: 400; font-size: 0.82rem; line-height: 1.3; opacity: 0.9; }
+.choice .cold { background: var(--enamel); }
+.choice .warm { background: #b8473f; }
+.dlc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+.dlc-label { font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.chip {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--night-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.chip[aria-pressed="true"] { background: var(--cream); color: var(--night); border-color: var(--cream); }
+.chip[aria-pressed="true"]::before { content: "+ "; }
+.aside { margin: 0; font-size: 0.85rem; color: var(--muted); font-style: italic; }
+.best { margin: 0; font-family: var(--display); color: var(--muted); font-size: 0.9rem; }
+
+.foot { margin-top: auto; text-align: center; font-family: var(--display); font-size: 0.8rem; color: var(--muted); min-height: 1.3em; opacity: 0.9; transition: opacity 0.3s; }
+.foot.fade { opacity: 0; }
+
+/* End screen + share card */
+.end {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--scrim);
+  overflow-y: auto;
+  padding-inline: 16px;
+  padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--cassava);
+  color: var(--night);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 6px 6px 0 var(--cassava-deep);
+  animation: pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes pop { from { transform: scale(0.9) rotate(-2deg); opacity: 0; } }
+.card-top { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--display); }
+.card-top .brand { color: var(--night); text-shadow: none; font-size: 1.2rem; }
+.card-top span { font-size: 0.8rem; }
+#cardBowl { width: 100%; aspect-ratio: 1; max-width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 8px; border: 3px solid var(--night); display: block; background: var(--night); }
+.grade-row { display: flex; align-items: center; gap: 14px; }
+.grade {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 4.4rem;
+  line-height: 0.85;
+  width: 1.1em;
+  text-align: center;
+  color: var(--cassava);
+  background: var(--night);
+  border-radius: 10px;
+  padding: 8px 0 6px;
+}
+.gname { font-family: var(--display); font-weight: 700; font-size: 1.4rem; line-height: 1.1; }
+.score { font-family: var(--display); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.score b { font-size: 1.6rem; }
+.line { margin: 0; font-family: var(--display); font-size: 1.15rem; line-height: 1.25; text-wrap: balance; }
+.tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tags li { font-size: 0.82rem; font-weight: 700; padding: 3px 9px; border: 2px solid var(--night); border-radius: 999px; }
+.breakdown { margin: 0; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.breakdown dt { font-weight: 700; }
+.breakdown dd { margin: 0; }
+.breakdown .bar { height: 8px; background: rgba(28, 24, 56, 0.18); border-radius: 4px; overflow: hidden; }
+.breakdown .bar i { display: block; height: 100%; background: var(--night); }
+.card-foot { display: flex; justify-content: space-between; gap: 8px; font-family: var(--display); font-size: 0.8rem; border-top: 2px dashed var(--night); padding-top: 8px; }
+.end-actions { width: 100%; max-width: 360px; display: flex; gap: 8px; flex-wrap: wrap; }
+.end-note { margin: 0; font-family: var(--display); color: var(--muted); font-size: 0.9rem; text-align: center; }
+.share-fallback { width: 100%; max-width: 360px; min-height: 70px; font: 0.9rem var(--body); background: var(--night-2); color: var(--cream); border: 2px solid var(--line); border-radius: 8px; padding: 8px; }
+
+@media (max-height: 640px) {
+  .phase-title { font-size: 1.25rem; }
+  .hint { font-size: 0.85rem; }
+  .btn { min-height: 50px; }
+  .btn.big { min-height: 56px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, #bowl.shake { animation: none; }
+  .toast, .foot { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Soak the Bag</h1>
+    <div class="top-actions">
+      <button class="btn-sm" id="soundBtn" aria-pressed="true">Sound on</button>
+      <button class="btn-sm" id="restartBtn">Restart</button>
+    </div>
+  </header>
+
+  <div class="strip">
+    <ol class="steps" id="steps" aria-label="Recipe steps">
+      <li>Pour</li><li>Water</li><li>Mix</li><li>Sugar</li><li>Eat</li>
+    </ol>
+    <div class="clock" id="clock" aria-live="off">
+      <span class="clock-num" id="clockNum">--</span>
+      <div class="clock-bar"><i id="clockFill"></i></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="bowl" width="128" height="128" aria-label="The bowl"></canvas>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <section class="panel">
+    <h2 class="phase-title" id="phaseTitle">Soak the bag</h2>
+    <p class="hint" id="phaseHint"></p>
+    <div id="extra"></div>
+    <div class="meter-wrap" id="meterWrap" hidden>
+      <div class="meter" id="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Level">
+        <div class="band" id="band"><span>target</span></div>
+        <div class="fill" id="fill"></div>
+        <div class="mark" id="mark"></div>
+      </div>
+      <div class="readout"><span class="state" id="readL"></span><span class="num" id="readR"></span></div>
+    </div>
+    <div class="controls" id="controls"></div>
+  </section>
+
+  <footer class="foot" id="ticker">Charts fade. Garri stays.</footer>
+</div>
+
+<div class="end" id="end" hidden>
+  <div class="card" id="card">
+    <div class="card-top"><span class="brand">Soak the Bag</span><span id="cMeta"></span></div>
+    <canvas id="cardBowl" width="128" height="128" aria-label="Your finished bowl"></canvas>
+    <div class="grade-row">
+      <div class="grade" id="cGrade">S</div>
+      <div>
+        <div class="gname" id="cGradeName">Soaked perfect</div>
+        <div class="score"><b id="cScore">0</b> / 100</div>
+      </div>
+    </div>
+    <p class="line" id="cLine"></p>
+    <ul class="tags" id="cTags"></ul>
+    <dl class="breakdown" id="cBreak"></dl>
+    <div class="card-foot"><span>Charts fade. Garri stays.</span><span>$GARRI</span></div>
+  </div>
+  <div class="end-actions">
+    <button class="btn primary big" id="againBtn">Soak again</button>
+    <button class="btn" id="copyBtn">Copy share text</button>
+  </div>
+  <textarea class="share-fallback" id="shareFallback" readonly hidden aria-label="Share text"></textarea>
+  <p class="end-note" id="bestNote"></p>
+  <p class="end-note">Do not share your seed phrase. Share the recipe.</p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- constants ----------
+  const L = 128, CX = 64, CY = 64, RIM = 57, INNER = 50, N = L * L;
+  const DUR = { pour: 10, water: 12, sugar: 10 };
+  const ORDER = ["pour", "water", "mix", "sugar", "eat"];
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (s) => document.querySelector(s);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
+  };
+
+  // ---------- canvas + per-pixel fields ----------
+  const cv = $("#bowl"), ctx = cv.getContext("2d");
+  const cardCtx = $("#cardBowl").getContext("2d");
+  const img = ctx.createImageData(L, L), px = img.data;
+  const dist = new Float32Array(N), ang = new Float32Array(N), grain = new Float32Array(N);
+  const moist = new Float32Array(N), dry = new Float32Array(N), spot = new Float32Array(N);
+  const visited = new Uint8Array(N), eaten = new Uint8Array(N);
+  const base = new Uint8ClampedArray(N * 4);
+  const hash = (x, y) => { const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return s - Math.floor(s); };
+
+  (function buildBase() {
+    const chips = [0.55, 2.35, -2.2, -0.9];
+    for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) {
+      const i = y * L + x, dx = x + 0.5 - CX, dy = y + 0.5 - CY, d = Math.hypot(dx, dy);
+      dist[i] = d; ang[i] = Math.atan2(dy, dx);
+      grain[i] = hash(x, y) * 0.7 + hash(x >> 1, y >> 1) * 0.3;
+      let c;
+      if (d > RIM) {
+        const check = ((x >> 3) + (y >> 3)) & 1;
+        c = check ? [46, 40, 88] : [39, 34, 76];
+        if (x % 16 === 0 || y % 16 === 0) c = [58, 50, 106];
+        if (Math.hypot(dx - 4, dy - 6) < RIM + 1) c = c.map((v) => v * 0.58);
+      } else if (d > INNER) {
+        const lt = clamp(0.5 - 0.5 * ((dx + dy) * 0.7071) / d, 0, 1);
+        c = [lerp(30, 122, lt), lerp(70, 174, lt), lerp(150, 242, lt)];
+        if (d > RIM - 1.2) c = [18, 34, 84];
+        else if (d < INNER + 1.3) c = [216, 230, 248];
+        else for (const ca of chips) if (Math.abs(ang[i] - ca) < 0.05 && d > INNER + 2 && d < RIM - 2) c = [22, 26, 44];
+      } else {
+        const s = ((dx + dy) * 0.7071) / INNER, e = d / INNER;
+        const v = 0.93 + 0.06 * s - 0.14 * Math.max(0, e - 0.82) / 0.18;
+        c = [236 * v, 240 * v, 247 * v];
+      }
+      base[i * 4] = c[0]; base[i * 4 + 1] = c[1]; base[i * 4 + 2] = c[2]; base[i * 4 + 3] = 255;
+    }
+  })();
+
+  // ---------- sprites (pre-rendered pixel art) ----------
+  function sprite(w, h, paint) {
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const col = paint(x, y);
+      if (col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
+    }
+    return c;
+  }
+  // Woven plaid sack (the bag)
+  const bagSprite = sprite(28, 16, (x, y) => {
+    if (y === 15) return x > 2 && x < 25 ? "#8c7a52" : null;
+    if ((x === 0 || x === 27) && (y < 2 || y > 13)) return null;
+    const v = x % 9 < 2, h = y % 7 === 3;
+    if (v && h) return "#6a2a3a";
+    if (v) return "#2c5cb6";
+    if (h) return "#c43a34";
+    return (x + y) % 2 ? "#ece6d4" : "#ddd5bd";
+  });
+  // Pure water sachet (cold)
+  const sachetSprite = sprite(20, 13, (x, y) => {
+    if (x === 0 || x === 19 || y === 0 || y === 12) return "#6ea4d8";
+    if (y >= 4 && y <= 7) return (x > 3 && x < 16 && y === 5 && x % 2) ? "#2c5cb6" : "#f5f9ff";
+    return (x + y) % 3 ? "#a9d3f5" : "#c4e2fa";
+  });
+  // Flask (warm)
+  const flaskSprite = sprite(13, 20, (x, y) => {
+    if (y < 4) return x > 2 && x < 10 ? (y === 0 ? "#8d8d9a" : "#c4c4d0") : (y === 2 && x >= 10 ? "#c4c4d0" : null);
+    if (x === 0 || x === 12) return "#7a2420";
+    if (y >= 9 && y <= 12) return (x % 3 === 0 && y === 10) ? "#2f8a4a" : "#f2e6c8";
+    return x < 4 ? "#d4594f" : "#b8473f";
+  });
+
+  // ---------- audio ----------
+  let AC = null, soundOn = store.get("soak.sound") !== "off";
+  function audio() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+    if (AC && AC.state === "suspended") AC.resume();
+    return AC;
+  }
+  function noise(dur, freq, q, gain, type) {
+    if (!AC || !soundOn) return;
+    const len = Math.max(1, Math.floor(AC.sampleRate * dur));
+    const buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const s = AC.createBufferSource(); s.buffer = buf;
+    const f = AC.createBiquadFilter(); f.type = type || "bandpass"; f.frequency.value = freq; f.Q.value = q;
+    const g = AC.createGain(); g.gain.value = gain;
+    s.connect(f); f.connect(g); g.connect(AC.destination); s.start();
+  }
+  function tone(freq, dur, gain, type) {
+    if (!AC || !soundOn) return;
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    grain: () => noise(0.05, rand(3200, 5400), 1.3, 0.16),
+    water: () => noise(0.14, rand(700, 1100), 0.7, 0.14, "lowpass"),
+    clink: () => { tone(2150, 0.2, 0.11, "triangle"); tone(3240, 0.12, 0.05); },
+    tick: () => tone(rand(2600, 3300), 0.05, 0.05, "square"),
+    good: () => { tone(660, 0.12, 0.1, "triangle"); setTimeout(() => tone(990, 0.2, 0.1, "triangle"), 110); },
+    bad: () => tone(150, 0.3, 0.12, "sawtooth"),
+  };
+
+  // ---------- state ----------
+  let S, T = 0;
+  function fresh() {
+    moist.fill(0); dry.fill(0); spot.fill(0); visited.fill(0); eaten.fill(0);
+    return {
+      phase: "title", t: 0, left: 0, dur: 1,
+      holding: false, holdT: 0,
+      fill: 0, mound: 0, overflow: 0, spillWarned: false,
+      temp: null, water: 0, wvel: 0, wc: 0.5, whw: 0.08, swell: 0, base: 0, soup: 0,
+      spots: [], dryInit: 1, coverage: 0, garriN: 1, visitN: 0, pen: 0, outT: 0, outFlag: false, clinkCd: 0, cleanT: -1,
+      sugar: 0, spoons: 0, win: { c: 0.5, hw: 0.1 }, sugarTag: "low",
+      dlc: { nut: false, milk: false, ice: false }, nuts: [],
+      scores: { pour: 0, water: 0, mix: 0, sugar: 0, extra: 0 }, total: 0,
+      parts: [], crystals: [], spill: [], acc: 0, sndCd: 0,
+      spoon: { x: CX + 30, y: CY + 22, down: false, lx: 0, ly: 0, loaded: false },
+      eatT: 0, bitten: false,
+    };
+  }
+
+  const pileR = () => {
+    if (S.fill <= 0.003) return 0;
+    const r = INNER * Math.min(1, Math.sqrt(S.fill / 0.8));
+    return Math.min(INNER - 0.5, r * (1 + 0.07 * S.swell));
+  };
+
+  function acc(v, c, hw, fall) {
+    const d = Math.abs(v - c);
+    return d <= hw ? 1 - 0.2 * (d / hw) : Math.max(0, 0.8 * (1 - (d - hw) / fall));
+  }
+
+  // ---------- phase flow ----------
+  function go(p) {
+    S.phase = p; S.t = 0; S.holding = false;
+    if (p === "mix") S.dur = S.temp === "warm" ? 12 : 15;
+    else if (DUR[p]) S.dur = DUR[p];
+    S.left = S.dur;
+    if (p === "water") startWater();
+    if (p === "mix") startMix();
+    if (p === "eat") { S.spoon.down = false; S.eatT = 0; toast("Eat the dip."); }
+    renderUI();
+  }
+
+  function endPhase() {
+    S.holding = false;
+    switch (S.phase) {
+      case "pour":
+        S.scores.pour = 20 * acc(S.fill, 0.7, 0.1, 0.3);
+        if (S.fill < 0.6) toast(S.fill < 0.2 ? "Unsoaked bag. Where is the garri?" : "Stingy bag.");
+        else if (S.fill > 1) toast("Overflow. Waste is not a strategy.");
+        else { toast("Bowl up."); sfx.good(); }
+        go("water"); break;
+      case "water":
+        if (!S.temp) { chooseTemp("cold"); toast("Cold by default. No fear."); }
+        finishWater(); go("mix"); break;
+      case "mix":
+        S.scores.mix = Math.max(0, 30 * (0.82 * S.coverage + 0.18 * Math.min(1, S.visitN / S.garriN / 0.55)) - 2 * S.pen);
+        go("sugar"); break;
+      case "sugar":
+        lockSugar(); go("eat"); break;
+    }
+  }
+
+  // ---------- pour ----------
+  function pourStep(dt) {
+    if (S.holding) {
+      S.holdT += dt;
+      const rate = 0.05 + 0.13 * Math.min(1, S.holdT / 1.4);
+      S.fill = Math.min(1.25, S.fill + rate * dt);
+      S.acc += rate * dt * 520;
+      while (S.acc >= 1) { S.acc -= 1; emitGrain(); }
+      if (S.sndCd <= 0) { sfx.grain(); S.sndCd = 0.07; }
+      if (S.fill > 1) {
+        S.overflow += rate * dt;
+        for (let k = 0; k < 2; k++) emitSpill();
+        if (!S.spillWarned) { S.spillWarned = true; toast("Overflow. Stop pouring."); sfx.bad(); }
+      }
+    } else S.holdT = 0;
+    S.mound = lerp(S.mound, Math.min(1.2, S.fill), Math.min(1, dt * 6));
+  }
+  function emitGrain() {
+    const r = Math.max(4, pileR() * 0.9), a = rand(0, Math.PI * 2), rr = Math.sqrt(Math.random()) * r;
+    const tone = Math.random();
+    launch(rand(CX - 6, CX + 6), 12, CX + Math.cos(a) * rr, CY + Math.sin(a) * rr, rand(0.25, 0.4),
+      tone < 0.5 ? "#f4d27a" : tone < 0.85 ? "#e8bd4c" : "#c99a2e", "grain");
+  }
+  function emitSpill() {
+    const a = rand(0, Math.PI * 2), sp = rand(28, 46);
+    S.parts.push({ x: CX + Math.cos(a) * (INNER - 1), y: CY + Math.sin(a) * (INNER - 1), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0, life: rand(0.25, 0.45), c: "#e8bd4c", kind: "spill" });
+  }
+  function launch(sx, sy, tx, ty, T0, c, kind) {
+    const g = 220;
+    S.parts.push({ x: sx, y: sy, vx: (tx - sx) / T0, vy: (ty - sy - 0.5 * g * T0 * T0) / T0, g, life: T0, c, kind, tx, ty });
+  }
+
+  // ---------- water ----------
+  function startWater() {
+    S.wc = 0.3 + 0.4 * clamp(S.fill / 1.1, 0, 1);
+    addSpots(4 + (Math.random() < 0.5 ? 1 : 0));
+  }
+  function addSpots(n) {
+    const gR = pileR();
+    if (gR < 6) return;
+    for (let k = 0; k < n; k++) {
+      const a = rand(0, Math.PI * 2), rr = Math.sqrt(Math.random()) * gR * 0.72;
+      const s = { x: CX + Math.cos(a) * rr, y: CY + Math.sin(a) * rr, r: rand(4, 7.5), cells: [] };
+      const x0 = Math.max(0, Math.floor(s.x - s.r - 3)), x1 = Math.min(L - 1, Math.ceil(s.x + s.r + 3));
+      const y0 = Math.max(0, Math.floor(s.y - s.r - 3)), y1 = Math.min(L - 1, Math.ceil(s.y + s.r + 3));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const i = y * L + x;
+        if (dist[i] >= gR - 1) continue;
+        const d = Math.hypot(x + 0.5 - s.x, y + 0.5 - s.y) + (grain[i] - 0.5) * 1.6;
+        if (d < s.r + 2) {
+          spot[i] = Math.max(spot[i], d < s.r ? 1 : 1 - (d - s.r) / 2);
+          if (d < s.r + 1) s.cells.push(i);
+        }
+      }
+      S.spots.push(s);
+    }
+  }
+  function chooseTemp(t) {
+    S.temp = t;
+    S.whw = t === "warm" ? 0.06 : 0.085;
+    sfx.clink();
+    renderUI();
+  }
+  function waterStep(dt) {
+    if (!S.temp) return;
+    const warm = S.temp === "warm", rate = warm ? 0.17 : 0.11;
+    if (warm) S.wvel += ((S.holding ? rate : 0) - S.wvel) * Math.min(1, dt * (S.holding ? 4 : 2.6));
+    else S.wvel = S.holding ? rate : 0;
+    if (S.wvel < 0.002) S.wvel = 0;
+    S.water = Math.min(1, S.water + S.wvel * dt);
+    const ratio = S.water / S.wc;
+    S.swell = lerp(S.swell, Math.min(1, ratio), Math.min(1, dt * (warm ? 3 : 1.5)));
+    S.soup = clamp((S.water - S.wc - S.whw) / 0.18, 0, 1);
+    const gR = pileR();
+    if (gR < 1) return;
+    const soak = warm ? 0.9 : 0.5;
+    const px0 = CX + Math.sin(S.t * 2.1) * gR * 0.45, py0 = CY + Math.cos(S.t * 1.7) * gR * 0.35;
+    const x0 = Math.max(0, Math.floor(CX - gR)), x1 = Math.min(L - 1, Math.ceil(CX + gR));
+    for (let y = x0; y <= x1; y++) for (let x = x0; x <= x1; x++) {
+      const i = y * L + x;
+      if (dist[i] >= gR) continue;
+      const open = 1 - spot[i];
+      if (ratio > moist[i]) moist[i] += dt * (ratio - moist[i]) * soak * open;
+      if (S.wvel > 0) {
+        const r = Math.hypot(x - px0, y - py0);
+        if (r < 16) moist[i] = Math.min(1.3, moist[i] + dt * S.wvel * 14 * (1 - r / 16) * open * (warm ? 1.4 : 1));
+      }
+    }
+    if (S.wvel > 0) {
+      const sx = warm ? 21 : 25, sy = warm ? 8 : 16;
+      for (let k = 0; k < 3; k++) launch(sx + rand(-1, 1), sy, px0 + rand(-3, 3), py0 + rand(-3, 3), rand(0.2, 0.3), Math.random() < 0.7 ? "#9fcaf2" : "#e3f1ff", "water");
+      if (S.sndCd <= 0) { sfx.water(); S.sndCd = 0.12; }
+      if (warm && S.t % 0.2 < dt) S.parts.push({ x: sx + rand(-2, 2), y: sy - 2, vx: rand(-3, 3), vy: -12, g: 0, life: 0.8, c: "rgba(255,255,255,0.6)", kind: "steam" });
+    }
+  }
+  function finishWater() {
+    const ratio = S.water / S.wc;
+    S.base = clamp(ratio, 0, 1) * 0.92 + 0.08;
+    S.soup = clamp((S.water - S.wc - S.whw) / 0.18, 0, 1);
+    if (ratio < 0.85) addSpots(Math.round((0.85 - ratio) * 10));
+    const gR = pileR();
+    let sum = 0, n = 0;
+    for (let i = 0; i < N; i++) {
+      if (dist[i] >= gR) continue;
+      n++; moist[i] = S.base; dry[i] = spot[i]; sum += dry[i];
+    }
+    S.garriN = Math.max(1, n);
+    S.dryInit = Math.max(0.0001, sum);
+    const d = Math.abs(S.water - S.wc), inBand = d <= S.whw;
+    const bonus = inBand ? (S.temp === "warm" ? 5 : 4) : d <= S.whw * 2 ? 2 : 0;
+    S.scores.water = 20 * acc(S.water, S.wc, S.whw, 0.25) + bonus;
+    if (S.soup > 0.3) { toast("Soup. Red candle energy."); sfx.bad(); }
+    else if (ratio < 0.8) toast("Dry spots incoming.");
+    else { toast(S.temp === "cold" ? "Cold water, no fear." : "Warm. Soft. Healing."); sfx.good(); }
+  }
+
+  // ---------- mix ----------
+  function startMix() {
+    S.spoon.x = CX + 22; S.spoon.y = CY + 16;
+    S.coverage = S.dryInit < 0.01 ? 1 : 0;
+  }
+  function stir(x0, y0, x1, y1, power) {
+    const gR = pileR(), len = Math.hypot(x1 - x0, y1 - y0), steps = Math.max(1, Math.ceil(len));
+    const R = 6;
+    for (let s = 0; s <= steps; s++) {
+      const x = x0 + (x1 - x0) * (s / steps), y = y0 + (y1 - y0) * (s / steps);
+      const bx0 = Math.max(0, Math.floor(x - R)), bx1 = Math.min(L - 1, Math.ceil(x + R));
+      const by0 = Math.max(0, Math.floor(y - R)), by1 = Math.min(L - 1, Math.ceil(y + R));
+      for (let yy = by0; yy <= by1; yy++) for (let xx = bx0; xx <= bx1; xx++) {
+        const i = yy * L + xx;
+        if (dist[i] >= gR) continue;
+        const r = Math.hypot(xx + 0.5 - x, yy + 0.5 - y);
+        if (r > R) continue;
+        if (dry[i] > 0) dry[i] = Math.max(0, dry[i] - power * (1 - r / (R + 1)));
+        if (!visited[i]) { visited[i] = 1; S.visitN++; }
+      }
+    }
+  }
+  function mixStep(dt) {
+    let sum = 0;
+    for (const s of S.spots) for (const i of s.cells) sum += dry[i];
+    S.coverage = S.dryInit < 0.01 ? 1 : clamp(1 - sum / S.dryInit, 0, 1);
+    const sp = S.spoon, d = Math.hypot(sp.x - CX, sp.y - CY);
+    S.clinkCd -= dt;
+    if (sp.down) {
+      if (d > INNER - 3 && d < INNER + 2 && S.clinkCd <= 0) { sfx.clink(); S.clinkCd = 0.35; }
+      if (d > INNER + 1) {
+        S.outT += dt;
+        if (S.outT > 1 && !S.outFlag && S.pen < 3) {
+          S.outFlag = true; S.pen++;
+          toast("Spoon left the bowl. Guard the hardware wallet. -2"); sfx.bad();
+        }
+      } else { S.outT = 0; S.outFlag = false; }
+    } else S.outT = 0;
+    if (S.coverage >= 0.97 && S.cleanT < 0) { S.cleanT = 0; toast("All bags soaked."); sfx.good(); }
+    if (S.cleanT >= 0) { S.cleanT += dt; if (S.cleanT > 0.9) endPhase(); }
+  }
+  const spotsLeft = () => S.spots.filter((s) => {
+    if (!s.cells.length) return false;
+    let a = 0; for (const i of s.cells) a += dry[i];
+    return a / s.cells.length > 0.22;
+  }).length;
+
+  // ---------- sugar ----------
+  function sugarStep() {
+    const k = clamp(S.t / S.dur, 0, 1);
+    S.win.c = 0.46 + 0.14 * Math.sin(S.t * 1.25 + 0.6);
+    S.win.hw = lerp(0.1, 0.04, k);
+  }
+  function addSugar() {
+    if (S.phase !== "sugar") return;
+    S.sugar = Math.min(1, S.sugar + 0.06 + Math.random() * 0.012);
+    S.spoons++;
+    const gR = Math.max(6, pileR() * 0.85);
+    for (let k = 0; k < 12; k++) {
+      const a = rand(0, Math.PI * 2), rr = Math.sqrt(Math.random()) * gR;
+      launch(rand(CX - 4, CX + 4), 2, CX + Math.cos(a) * rr, CY + Math.sin(a) * rr, rand(0.25, 0.4), "#ffffff", "sugar");
+    }
+    sfx.tick();
+    if (!reduceMotion) { cv.classList.remove("shake"); void cv.offsetWidth; cv.classList.add("shake"); }
+    if (S.sugar >= 0.999) toast("You became the liquidity.");
+  }
+  function lockSugar() {
+    const { c, hw } = S.win;
+    S.scores.sugar = 25 * acc(S.sugar, c, hw, 0.15);
+    S.sugarTag = S.sugar < c - hw ? "low" : S.sugar > c + hw ? "flooded" : "sweet";
+    if (S.sugarTag === "sweet") sfx.good(); else sfx.bad();
+  }
+  function toggleDlc(key) {
+    S.dlc[key] = !S.dlc[key];
+    if (key === "nut" && S.dlc.nut && !S.nuts.length) {
+      const gR = Math.max(6, pileR() * 0.7);
+      for (let k = 0; k < 12; k++) { const a = rand(0, Math.PI * 2), rr = Math.sqrt(Math.random()) * gR; S.nuts.push({ x: Math.round(CX + Math.cos(a) * rr), y: Math.round(CY + Math.sin(a) * rr) }); }
+    }
+    if (S.dlc[key]) sfx.clink();
+    if (key === "milk" && S.dlc.milk) toast("Milk is a side quest.");
+    renderUI();
+  }
+
+  // ---------- eat ----------
+  const REST = { x: CX + 30, y: CY + 22 };
+  function eatStep(dt) {
+    S.eatT += dt;
+    const t = S.eatT, sp = S.spoon, bite = { x: CX + 3, y: CY - 2 };
+    if (t < 0.9) { const k = easeIO(t / 0.9); sp.x = lerp(REST.x, bite.x, k); sp.y = lerp(REST.y, bite.y, k); }
+    else if (!S.bitten) {
+      S.bitten = true; sp.loaded = true; sfx.clink();
+      for (let i = 0; i < N; i++) {
+        const x = (i % L) + 0.5, y = ((i / L) | 0) + 0.5;
+        if (Math.hypot(x - bite.x, y - bite.y) + (grain[i] - 0.5) * 1.5 < 5) eaten[i] = 1;
+      }
+    } else if (t < 1.8) { const k = easeIO((t - 0.9) / 0.9); sp.x = bite.x + k * 4; sp.y = lerp(bite.y, -24, k); }
+    else if (t < 2.5) { sp.loaded = false; sp.x = REST.x; sp.y = REST.y; }
+    else showEnd();
+  }
+  const easeIO = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
+  // ---------- results ----------
+  const GRADES = [[90, "S", "Soaked perfect"], [78, "A", "Sweet"], [62, "B", "Edible"], [45, "C", "Chalky"], [0, "D", ""]];
+  function results() {
+    const sc = S.scores;
+    sc.extra = (S.dlc.nut ? 1 : 0) + (S.dlc.milk ? 1 : 0) + (S.dlc.ice ? 1 : 0);
+    const raw = sc.pour + sc.water + sc.mix + sc.sugar;
+    const total = Math.min(100, Math.round(raw) + sc.extra);
+    let [, g, name] = GRADES.find(([min]) => total >= min);
+    if (g === "D") name = S.water > S.wc ? "Soup" : "Dry";
+    const parts = { pour: sc.pour / 20, water: sc.water / 25, mix: sc.mix / 30, sugar: sc.sugar / 25 };
+    const worst = Object.keys(parts).reduce((a, b) => (parts[a] <= parts[b] ? a : b));
+    let line;
+    if (total >= 90) line = S.temp === "cold" ? "Cold water, no fear. Sugar was alpha." : "Warm water, soft landing. Sugar was alpha.";
+    else if (worst === "pour") line = S.fill < 0.6 ? "Stingy bag. Pour with conviction." : "Overflow. Waste is not a strategy.";
+    else if (worst === "water") line = S.water < S.wc ? "Dry spots still in the bag." : "Soup. Red candle energy.";
+    else if (worst === "mix") line = S.pen ? "Unsoaked bag. And the spoon went walkabout." : "Unsoaked bag.";
+    else line = S.sugarTag === "low" ? "Boring chart." : S.sugarTag === "flooded" ? "You became the liquidity." : "Sugar was alpha. The timing was not.";
+    return { total, g, name, line };
+  }
+  function shareText(r) {
+    const temp = S.temp === "warm" ? "Warm" : "Cold";
+    const milk = S.dlc.milk ? "Milk side quest cleared." : "No milk no fear.";
+    return `I soaked the bag — ${r.g} (${r.total}). ${temp}, sugar ${S.sugarTag}. ${milk} $GARRI`;
+  }
+
+  let lastResult = null;
+  function showEnd() {
+    S.phase = "end";
+    const r = results();
+    lastResult = r;
+    const prev = parseInt(store.get("soak.best") || "0", 10) || 0;
+    const isBest = r.total > prev;
+    if (isBest) store.set("soak.best", String(r.total));
+    $("#cGrade").textContent = r.g;
+    $("#cGradeName").textContent = r.name;
+    $("#cScore").textContent = r.total;
+    $("#cLine").textContent = r.line;
+    $("#cMeta").textContent = `Best ${Math.max(prev, r.total)}`;
+    const tags = [S.temp === "warm" ? "Warm water" : "Cold water", `Sugar ${S.sugarTag}`, S.dlc.milk ? "Milk side quest" : "No milk no fear"];
+    if (S.dlc.nut) tags.push("Groundnut");
+    if (S.dlc.ice) tags.push("Ice");
+    $("#cTags").innerHTML = tags.map((t) => `<li>${t}</li>`).join("");
+    const rows = [["Pour", S.scores.pour, 20], ["Water", S.scores.water, 25], ["Mix", S.scores.mix, 30], ["Sugar", S.scores.sugar, 25]];
+    let html = rows.map(([n, v, m]) => `<dt>${n}</dt><dd><div class="bar"><i style="width:${(v / m) * 100}%"></i></div></dd><dd>${Math.round(v)}/${m}</dd>`).join("");
+    if (S.scores.extra) html += `<dt>Extras</dt><dd></dd><dd>+${S.scores.extra}</dd>`;
+    $("#cBreak").innerHTML = html;
+    $("#bestNote").textContent = isBest && prev ? `New best. Old best was ${prev}.` : isBest ? "First bowl on the board." : `Best on this device: ${prev}`;
+    $("#shareFallback").hidden = true;
+    $("#copyBtn").textContent = "Copy share text";
+    $("#end").hidden = false;
+    if (r.total >= 78) sfx.good();
+    renderUI();
+    setTimeout(() => $("#againBtn").focus({ preventScroll: true }), 60);
+  }
+
+  // ---------- particles ----------
+  function partsStep(dt) {
+    const keep = [];
+    for (const p of S.parts) {
+      p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+      if (p.life > 0) { keep.push(p); continue; }
+      if (p.kind === "sugar" && S.crystals.length < 320) S.crystals.push({ x: Math.round(p.tx), y: Math.round(p.ty), a: 1 });
+      if (p.kind === "spill" && S.spill.length < 500) S.spill.push((Math.round(p.y) * L + Math.round(p.x)) | 0);
+    }
+    S.parts = keep;
+    for (const c of S.crystals) c.a = Math.max(0.35, c.a - dt * 0.12);
+  }
+
+  // ---------- render ----------
+  function render() {
+    px.set(base);
+    for (const i of S.spill) if (i >= 0 && i < N && dist[i] > RIM) { const k = i * 4; px[k] = 226; px[k + 1] = 182; px[k + 2] = 64; }
+    const gR = pileR();
+    if (gR > 0.6) {
+      const mound = S.mound, soup = S.soup, milk = S.dlc.milk;
+      const idle = S.phase === "eat" || S.phase === "end";
+      const x0 = Math.max(0, Math.floor(CX - gR)), x1 = Math.min(L - 1, Math.ceil(CX + gR));
+      for (let y = x0; y <= x1; y++) for (let x = x0; x <= x1; x++) {
+        const i = y * L + x, d = dist[i];
+        if (d >= gR || eaten[i]) continue;
+        const dx = x + 0.5 - CX, dy = y + 0.5 - CY, g = grain[i], e = d / gR;
+        let m = moist[i] > 1 ? 1 : moist[i];
+        m *= 1 - 0.85 * dry[i];
+        let r = 247 + (224 - 247) * m, gg = 230 + (162 - 230) * m, b = 160 + (50 - 160) * m;
+        let light = 0.88 + 0.16 * g + mound * 0.2 * (1 - e) - 0.05 * ((dx + dy) / gR) * mound - 0.14 * Math.pow(e, 8);
+        if (g < 0.32 * (1 - m)) { light *= 0.76; b *= 0.8; }
+        if (milk && e < 0.85 && Math.sin(ang[i] * 2 + d * 0.22 - T * 0.4) > 0.55) { r = lerp(r, 255, 0.45); gg = lerp(gg, 247, 0.45); b = lerp(b, 228, 0.45); }
+        if (soup > 0) {
+          r = lerp(r, 196, soup * 0.5); gg = lerp(gg, 214, soup * 0.5); b = lerp(b, 228, soup * 0.5);
+          if (Math.sin(x * 0.55 + y * 0.35 + T * 2.4) > 0.93) light += 0.18 * soup;
+        }
+        if (idle && Math.sin((dx - dy) * 0.12 - T * 1.6) > 0.96) light += 0.12;
+        const k = i * 4;
+        px[k] = r * light; px[k + 1] = gg * light; px[k + 2] = b * light;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // toppings
+    for (const n of S.nuts) if (S.dlc.nut && !eaten[n.y * L + n.x]) {
+      ctx.fillStyle = "#8a5426"; ctx.fillRect(n.x, n.y, 3, 2);
+      ctx.fillStyle = "#c98a4a"; ctx.fillRect(n.x, n.y, 1, 1);
+    }
+    for (const c of S.crystals) { ctx.globalAlpha = c.a; ctx.fillStyle = "#ffffff"; ctx.fillRect(c.x, c.y, 1, 1); }
+    ctx.globalAlpha = 1;
+    if (S.dlc.ice) [[-14, -10], [12, -14], [4, 12]].forEach(([ox, oy], k) => {
+      const x = CX + ox, y = Math.round(CY + oy + Math.sin(T * 2 + k) * 0.8);
+      ctx.fillStyle = "#9cc8ea"; ctx.fillRect(x, y, 6, 6);
+      ctx.fillStyle = "#d9eeff"; ctx.fillRect(x + 1, y + 1, 4, 4);
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(x + 1, y + 1, 2, 1);
+    });
+
+    // vessels
+    const ph = S.phase;
+    if (ph === "title" || ph === "pour") {
+      const tilt = ph === "pour" && S.holding ? 3 : 0;
+      const bob = ph === "title" ? Math.round(Math.sin(T * 2) * 1.2) : 0;
+      ctx.drawImage(bagSprite, 50, -3 + tilt + bob);
+      if (ph === "pour" && S.holding) { ctx.fillStyle = "#f0cc62"; for (let k = 0; k < 3; k++) ctx.fillRect(CX - 2 + ((T * 30 + k * 3) | 0) % 5, 13 + k * 2, 1, 1); }
+    }
+    if (ph === "water" && S.temp) {
+      const pour = S.wvel > 0.01;
+      if (S.temp === "cold") {
+        const sq = pour ? 1 : 0;
+        ctx.drawImage(sachetSprite, 6, 4 + sq, 20, 13 - sq);
+      } else {
+        ctx.drawImage(flaskSprite, 8, pour ? 0 : 2);
+      }
+    }
+    if (ph === "water" || ph === "mix" || ph === "sugar") {
+      const k = clamp(ph === "water" ? S.water : 1, 0, 1);
+      if (ph === "water" && S.temp) { ctx.fillStyle = "#2a2450"; ctx.fillRect(122, 20, 3, 88); ctx.fillStyle = "#9fcaf2"; ctx.fillRect(122, 108 - 88 * k, 3, 88 * k); }
+    }
+    if (ph === "mix" || ph === "sugar" || ph === "eat" || ph === "end") drawSpoon(S.spoon.x, S.spoon.y, S.spoon.loaded);
+
+    // particles
+    for (const p of S.parts) {
+      if (p.kind === "steam") { ctx.globalAlpha = clamp(p.life, 0, 1) * 0.6; }
+      ctx.fillStyle = p.c; ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      ctx.globalAlpha = 1;
+    }
+    // idle steam / frost on the finished bowl
+    if ((ph === "eat" || ph === "end") && !reduceMotion) {
+      if (S.temp === "warm") {
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        for (let k = 0; k < 3; k++) {
+          const yy = (T * 10 + k * 14) % 40;
+          ctx.fillRect(Math.round(CX - 10 + k * 10 + Math.sin(T * 2 + k + yy * 0.2) * 2), Math.round(CY - 8 - yy), 1, 2);
+        }
+      } else {
+        ctx.fillStyle = "#ffffff";
+        const a = T * 0.7; ctx.fillRect(Math.round(CX + Math.cos(a) * (INNER + 3)), Math.round(CY + Math.sin(a) * (INNER + 3)), 1, 1);
+      }
+    }
+    if (!$("#end").hidden) { cardCtx.imageSmoothingEnabled = false; cardCtx.drawImage(cv, 0, 0); }
+  }
+
+  function drawSpoon(x, y, loaded) {
+    x = Math.round(clamp(x, -6, L + 6)); y = Math.round(clamp(y, -30, L + 6));
+    let hx = x - CX, hy = y - CY; const hl = Math.hypot(hx, hy);
+    if (hl < 4) { hx = 0.7; hy = 0.7; } else { hx /= hl; hy /= hl; }
+    for (let s = 5; s < 30; s += 0.5) {
+      const sx = Math.round(x + hx * s), sy = Math.round(y + hy * s);
+      ctx.fillStyle = "#5e3a1a"; ctx.fillRect(sx, sy + 1, 2, 1);
+      ctx.fillStyle = s > 9 ? "#9a6633" : "#a7aab4"; ctx.fillRect(sx, sy, 2, 1);
+    }
+    for (let oy = -4; oy <= 4; oy++) for (let ox = -5; ox <= 5; ox++) {
+      const q = (ox * ox) / 25 + (oy * oy) / 13;
+      if (q > 1) continue;
+      ctx.fillStyle = q > 0.7 ? "#6f7380" : ox + oy < -2 ? "#eef0f4" : "#b9bdc8";
+      if (loaded && q < 0.6) ctx.fillStyle = (ox + oy) & 1 ? "#d9a33a" : "#e8bb52";
+      ctx.fillRect(x + ox, y + oy, 1, 1);
+    }
+  }
+
+  // ---------- UI ----------
+  const COPY = {
+    title: ["Soak the bag", "Bowl. Water. Spoon. Maybe sugar if the house is bouncing."],
+    pour: ["Pour the garri", "Not a polite sprinkle. A pile. Hold to pour and stop inside the target band."],
+    water: ["Cold or warm", "Cold is crisp, loud, street. Warm swells fast and keeps flowing after you let go."],
+    waterGo: ["Cold or warm", "Hold to pour. Stop in the band. Too much and it turns to soup."],
+    mix: ["Bowl + spoon. Mix.", "Drag the spoon in circles over the pale dry spots. Keep the spoon in the bowl."],
+    sugar: ["Sugar is alpha", "Tap to add. The sweet window moves and shrinks. Lock it in while you are inside it."],
+    eat: ["Eat. Then ape.", "Eat the dip."],
+  };
+  function renderUI() {
+    const ph = S.phase === "end" ? "eat" : S.phase;
+    const key = ph === "water" && S.temp ? "waterGo" : ph;
+    const idx = ORDER.indexOf(ph);
+    $("#phaseTitle").innerHTML = (idx >= 0 ? `<small>${idx + 1}/5</small>` : "") + COPY[key][0];
+    $("#phaseHint").textContent = COPY[key][1];
+    document.querySelectorAll("#steps li").forEach((li, k) => {
+      li.classList.toggle("done", idx > k || S.phase === "end");
+      if (k === idx && S.phase !== "end") li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+    const extra = $("#extra");
+    if (S.phase === "title") {
+      const best = parseInt(store.get("soak.best") || "0", 10) || 0;
+      const coach = !store.get("soak.coached") ? `<ul class="coach">
+        <li><b>1</b>Hold to pour. Stop inside the target band.</li>
+        <li><b>2</b>Pick cold or warm, pour, then drag the spoon over the pale dry spots.</li>
+        <li><b>3</b>Tap sugar in. Lock it while you are inside the moving window.</li></ul>` : "";
+      extra.innerHTML = coach + `<p class="best">${best ? `Best bowl: ${best}` : "Stop staring. Start soaking."}</p>`;
+    } else extra.innerHTML = "";
+
+    $("#meterWrap").hidden = !(ph === "pour" || (ph === "water" && S.temp) || ph === "mix" || ph === "sugar");
+    const m = $("#meter");
+    m.className = "meter" + (ph === "water" ? " water" : ph === "sugar" ? " sugar" : "");
+    $("#band").querySelector("span").textContent = ph === "mix" ? "clean" : ph === "sugar" ? "sweet" : "target";
+
+    const c = $("#controls");
+    let h = "";
+    if (S.phase === "title") h = `<button class="btn primary big" id="startBtn">Soak the bag</button>`;
+    else if (ph === "pour") h = `<button class="btn hold big" id="holdBtn">Hold to pour</button><button class="btn primary" id="nextBtn">Bowl up</button>`;
+    else if (ph === "water" && !S.temp) h = `<div class="choice">
+      <button class="btn cold" data-temp="cold"><b>Cold</b><small>Crisp and loud. Stops the moment you stop.</small></button>
+      <button class="btn warm" data-temp="warm"><b>Warm</b><small>Soft, late-night. Keeps flowing after you let go.</small></button></div>`;
+    else if (ph === "water") h = `<button class="btn hold big" id="holdBtn">Hold to pour water</button><button class="btn primary" id="nextBtn">Done pouring</button>`;
+    else if (ph === "mix") h = `<button class="btn primary big" id="nextBtn">Done stirring</button>`;
+    else if (ph === "sugar") h = `<button class="btn hold big" id="sugarBtn">Add sugar</button><button class="btn primary" id="nextBtn">Lock it in</button>
+      <div class="dlc"><span class="dlc-label">Optional DLC</span>
+      <button class="chip" data-dlc="nut" aria-pressed="${S.dlc.nut}">Groundnut</button>
+      <button class="chip" data-dlc="milk" aria-pressed="${S.dlc.milk}">Milk</button>
+      <button class="chip" data-dlc="ice" aria-pressed="${S.dlc.ice}">Ice</button></div>
+      <p class="aside">Milk is a side quest. Water is canon. Sugar is the upgrade.</p>`;
+    c.innerHTML = h;
+    const hb = $("#holdBtn"); if (hb) wireHold(hb);
+    const nb = $("#nextBtn"); if (nb) nb.addEventListener("click", () => { audio(); endPhase(); });
+    const sb = $("#startBtn"); if (sb) sb.addEventListener("click", () => { audio(); store.set("soak.coached", "1"); go("pour"); });
+    const sg = $("#sugarBtn"); if (sg) sg.addEventListener("click", () => { audio(); addSugar(); });
+    c.querySelectorAll("[data-temp]").forEach((b) => b.addEventListener("click", () => { audio(); chooseTemp(b.dataset.temp); }));
+    c.querySelectorAll("[data-dlc]").forEach((b) => b.addEventListener("click", () => toggleDlc(b.dataset.dlc)));
+  }
+
+  function wireHold(btn) {
+    btn.addEventListener("pointerdown", (e) => { e.preventDefault(); audio(); try { btn.setPointerCapture(e.pointerId); } catch (_) {} setHold(true); });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) => btn.addEventListener(ev, () => setHold(false)));
+    btn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); audio(); setHold(true); } });
+    btn.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setHold(false); } });
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+  function setHold(v) {
+    if (S.phase !== "pour" && !(S.phase === "water" && S.temp)) v = false;
+    S.holding = v;
+    const b = $("#holdBtn"); if (b) b.classList.toggle("on", v);
+  }
+
+  function setMeter(value, max, lo, hi, state, cls, right) {
+    $("#fill").style.width = `${clamp(value / max, 0, 1) * 100}%`;
+    $("#mark").style.left = `calc(${clamp(value / max, 0, 1) * 100}% - 1px)`;
+    const band = $("#band");
+    band.style.left = `${(lo / max) * 100}%`;
+    band.style.width = `${((hi - lo) / max) * 100}%`;
+    band.firstElementChild.style.visibility = (hi - lo) / max < 0.14 ? "hidden" : "visible";
+    const l = $("#readL"); l.textContent = state; l.className = "state " + cls;
+    $("#readR").textContent = right;
+    $("#meter").setAttribute("aria-valuenow", String(Math.round((value / max) * 100)));
+  }
+  function hud() {
+    const ph = S.phase, timed = ph === "pour" || ph === "water" || ph === "mix" || ph === "sugar";
+    $("#clockNum").textContent = timed ? `${S.left.toFixed(1)}s` : "--";
+    $("#clockFill").style.transform = `scaleX(${timed ? clamp(S.left / S.dur, 0, 1) : 0})`;
+    $("#clock").classList.toggle("hurry", timed && S.left < 3);
+    if (ph === "pour") {
+      const f = S.fill;
+      const [st, cl] = f < 0.6 ? ["Stingy bag", f < 0.45 ? "bad" : "warn"] : f <= 0.8 ? ["In the band", "good"] : f <= 1 ? ["Heavy pile", "warn"] : ["Overflow", "bad"];
+      setMeter(f, 1.25, 0.6, 0.8, st, cl, `${Math.round(f * 100)}% full`);
+    } else if (ph === "water" && S.temp) {
+      const w = S.water, lo = S.wc - S.whw, hi = S.wc + S.whw;
+      const [st, cl] = w < lo ? ["Too dry", w < lo - 0.12 ? "bad" : "warn"] : w <= hi ? ["In the band", "good"] : S.soup > 0.3 ? ["Soup", "bad"] : ["Getting wet", "warn"];
+      setMeter(w, 1, lo, hi, st, cl, S.temp === "warm" ? "Warm" : "Cold");
+    } else if (ph === "mix") {
+      const left = spotsLeft();
+      setMeter(S.coverage, 1, 0.9, 1, left ? `${left} dry spot${left > 1 ? "s" : ""} left` : "All bags soaked", left ? (left > 2 ? "bad" : "warn") : "good", `${Math.round(S.coverage * 100)}% soaked`);
+    } else if (ph === "sugar") {
+      const s = S.sugar, lo = S.win.c - S.win.hw, hi = S.win.c + S.win.hw;
+      const [st, cl] = s < lo ? ["Boring chart", "warn"] : s <= hi ? ["Sugar is alpha", "good"] : ["You are the liquidity", "bad"];
+      setMeter(s, 1, lo, hi, st, cl, `${S.spoons} spoon${S.spoons === 1 ? "" : "s"}`);
+    }
+  }
+
+  let toastTimer = 0;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1700);
+  }
+
+  // ---------- canvas input ----------
+  function cpos(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * L, y: ((e.clientY - r.top) / r.height) * L }; }
+  cv.addEventListener("pointerdown", (e) => {
+    audio();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    const p = cpos(e), ph = S.phase;
+    if (ph === "title") { store.set("soak.coached", "1"); go("pour"); }
+    else if (ph === "pour" || (ph === "water" && S.temp)) setHold(true);
+    else if (ph === "mix") {
+      const sp = S.spoon; sp.down = true; sp.x = sp.lx = p.x; sp.y = sp.ly = p.y;
+      stir(p.x, p.y, p.x, p.y, 0.2); sfx.tick();
+    } else if (ph === "sugar") addSugar();
+  });
+  cv.addEventListener("pointermove", (e) => {
+    const sp = S.spoon;
+    if (S.phase !== "mix" || !sp.down) return;
+    const p = cpos(e);
+    stir(sp.lx, sp.ly, p.x, p.y, 0.07);
+    sp.x = sp.lx = p.x; sp.y = sp.ly = p.y;
+  });
+  ["pointerup", "pointercancel"].forEach((ev) => cv.addEventListener(ev, () => { setHold(false); S.spoon.down = false; }));
+
+  // ---------- top buttons ----------
+  function restart() { audio(); $("#end").hidden = true; S = fresh(); store.set("soak.coached", "1"); go("pour"); }
+  $("#restartBtn").addEventListener("click", restart);
+  $("#againBtn").addEventListener("click", restart);
+  const soundBtn = $("#soundBtn");
+  const syncSound = () => { soundBtn.textContent = soundOn ? "Sound on" : "Sound off"; soundBtn.setAttribute("aria-pressed", String(soundOn)); };
+  soundBtn.addEventListener("click", () => { soundOn = !soundOn; store.set("soak.sound", soundOn ? "on" : "off"); audio(); syncSound(); });
+  syncSound();
+  $("#copyBtn").addEventListener("click", () => {
+    const text = shareText(lastResult || results());
+    const fallback = () => { const ta = $("#shareFallback"); ta.value = text; ta.hidden = false; ta.focus(); ta.select(); $("#copyBtn").textContent = "Select and copy"; };
+    try {
+      navigator.clipboard.writeText(text).then(() => { $("#copyBtn").textContent = "Copied"; toast("Share the recipe."); }, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  // ---------- ticker ----------
+  const LINES = ["Charts fade. Garri stays.", "Do not share your seed phrase. Share the recipe.", "Stop staring. Start soaking.", "No milk no fear.", "Sugar is alpha.", "Eat the dip.", "Bowl up.", "You can rug a token. You cannot rug a bowl of soaked cassava at 2am."];
+  let li = 0;
+  setInterval(() => {
+    const t = $("#ticker"); t.classList.add("fade");
+    setTimeout(() => { li = (li + 1) % LINES.length; t.textContent = LINES[li]; t.classList.remove("fade"); }, 300);
+  }, 4200);
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    T += dt; S.t += dt; S.sndCd -= dt;
+    const ph = S.phase;
+    if (ph === "pour" || ph === "water" || ph === "mix" || ph === "sugar") {
+      S.left -= dt;
+      if (S.left <= 0) { S.left = 0; endPhase(); }
+    }
+    if (S.phase === ph) {
+      if (ph === "pour") pourStep(dt);
+      else if (ph === "water") waterStep(dt);
+      else if (ph === "mix") mixStep(dt);
+      else if (ph === "sugar") sugarStep();
+      else if (ph === "eat") eatStep(dt);
+    }
+    if (S.phase === "mix" || S.phase === "sugar" || S.phase === "eat" || S.phase === "end") S.mound = lerp(S.mound, S.fill * 0.3, Math.min(1, dt * 2));
+    partsStep(dt);
+    render();
+    hud();
+    requestAnimationFrame(frame);
+  }
+
+  S = fresh();
+  renderUI();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
